@@ -1,0 +1,35 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to DigitalOcean
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USERNAME }}
+          key: ${{ secrets.DO_SSH_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            set -euo pipefail
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+            cd "${{ secrets.DO_APP_DIR }}"
+            git fetch origin main
+            git reset --hard origin/main
+            npm ci
+            npm run build
+            if pm2 describe test-deployment >/dev/null 2>&1; then
+              pm2 restart test-deployment --update-env
+            else
+              pm2 start npm --name test-deployment -- start
+              pm2 save
+            fi
